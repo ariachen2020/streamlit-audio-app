@@ -1,0 +1,14 @@
+# Core Dependencies
+streamlit==1.29.0
+openai==1.3.7
+httpx>=0.24.1
+
+# File Handling
+python-dotenv==1.0.0
+
+# Time Handling
+python-dateutil==2.8.2
+
+# Optional but Recommended for Development
+black==23.11.0
+pylint==3.0.2
