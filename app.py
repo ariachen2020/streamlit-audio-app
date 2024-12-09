@@ -21,14 +21,17 @@ def create_txt(transcription):
 
 def main():
     st.title("音頻轉字幕工具")
-    st.write("上傳 M4A 檔案，自動轉換為 TXT 字幕檔")
+    st.write("上傳 M4A、MP4 或 WAV 檔案，自動轉換為 TXT 字幕檔")
 
-    uploaded_file = st.file_uploader("選擇音頻檔案", type=['m4a'])
+    uploaded_file = st.file_uploader("選擇音頻檔案", type=['m4a', 'mp4', 'wav'])
 
     if uploaded_file is not None:
         with st.spinner('處理中...'):
-            # 創建臨時檔案
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.m4a') as tmp_file:
+            # 取得檔案副檔名
+            file_extension = uploaded_file.name.split('.')[-1].lower()
+            
+            # 創建臨時檔案，使用正確的副檔名
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp_file:
                 tmp_file.write(uploaded_file.getvalue())
                 tmp_file_path = tmp_file.name
 
@@ -38,7 +41,7 @@ def main():
                     response = requests.post(
                         "https://api.openai.com/v1/audio/transcriptions",
                         headers={
-                            "Authorization": f"Bearer {openai.api_key}"
+                            "Authorization": f"Bearer {api_key}"
                         },
                         files={
                             "file": audio_file
