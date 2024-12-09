@@ -8,8 +8,12 @@ import requests
 # 設定頁面標題
 st.set_page_config(page_title="音頻轉字幕工具", layout="centered")
 
-# 設定 OpenAI API 金鑰
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# 設定 OpenAI API 金鑰（更安全的方式）
+api_key = st.secrets.get("OPENAI_API_KEY")
+if not api_key:
+    st.error("找不到 OpenAI API 金鑰。請在 secrets 中設定 OPENAI_API_KEY。")
+    st.stop()
+openai.api_key = api_key
 
 def create_txt(transcription):
     """將轉錄結果轉換為 TXT 格式"""
