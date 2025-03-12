@@ -14,6 +14,7 @@ import tempfile
 import subprocess
 import shutil
 import io
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -225,6 +226,21 @@ def process_audio(file_path, output_format='txt'):
         st.error(f"處理失敗: {str(e)}")
         return None
 
+@st.cache_data
+def check_ffmpeg():
+    """Check if ffmpeg is available and log its version"""
+    try:
+        result = subprocess.run(['ffmpeg', '-version'], 
+                              capture_output=True, 
+                              text=True,
+                              timeout=10)  # Add timeout
+        logger.info(f"FFmpeg version info: {result.stdout.split('\\n')[0]}")
+        return True
+    except Exception as e:
+        logger.error(f"FFmpeg check failed: {str(e)}")
+        return False
+
+@st.cache_data
 def convert_m4a_to_wav(input_path: str) -> Optional[str]:
     """Convert m4a to wav using ffmpeg directly"""
     try:
@@ -232,7 +248,10 @@ def convert_m4a_to_wav(input_path: str) -> Optional[str]:
         cmd = ['ffmpeg', '-i', input_path, '-acodec', 'pcm_s16le', '-ar', '44100', output_path]
         
         logger.info(f"Running FFmpeg command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, 
+                              capture_output=True, 
+                              text=True,
+                              timeout=30)  # Add timeout
         
         if result.returncode == 0 and os.path.exists(output_path):
             logger.info("Conversion successful")
@@ -244,30 +263,40 @@ def convert_m4a_to_wav(input_path: str) -> Optional[str]:
         logger.error(f"Error in conversion: {str(e)}")
         return None
 
-def check_ffmpeg():
-    """Check if ffmpeg is available and log its version"""
-    try:
-        result = subprocess.run(['ffmpeg', '-version'], 
-                              capture_output=True, 
-                              text=True)
-        logger.info(f"FFmpeg version info: {result.stdout.split('\\n')[0]}")
-        return True
-    except Exception as e:
-        logger.error(f"FFmpeg check failed: {str(e)}")
-        return False
-
 def save_audio_segment(audio: AudioSegment, temp_dir: str) -> Optional[str]:
     """Save AudioSegment to a temporary WAV file"""
     try:
-        temp_path = os.path.join(temp_dir, 'temp_output.wav')
+        temp_path = os.path.join(temp_dir, f'temp_output_{int(time.time())}.wav')
         audio.export(temp_path, format='wav')
         return temp_path
     except Exception as e:
         logger.error(f"Error saving audio segment: {str(e)}")
         return None
 
+def process_audio_file(file_path: str, file_ext: str) -> Optional[AudioSegment]:
+    """Process audio file based on extension"""
+    try:
+        if file_ext == '.m4a':
+            logger.info("Processing m4a file...")
+            wav_path = convert_m4a_to_wav(file_path)
+            if wav_path and os.path.exists(wav_path):
+                return AudioSegment.from_wav(wav_path)
+            raise ValueError("Failed to convert m4a to wav")
+        elif file_ext == '.mp3':
+            logger.info("Loading mp3 file...")
+            return AudioSegment.from_mp3(file_path)
+        elif file_ext == '.wav':
+            logger.info("Loading wav file...")
+            return AudioSegment.from_wav(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {file_ext}")
+    except Exception as e:
+        logger.error(f"Error processing audio file: {str(e)}")
+        raise
+
 def process_uploaded_file(uploaded_file) -> Optional[tuple[str, float]]:
     """Process the uploaded audio file with detailed error handling"""
+    temp_dir = None
     try:
         if uploaded_file is None:
             return None
@@ -279,65 +308,42 @@ def process_uploaded_file(uploaded_file) -> Optional[tuple[str, float]]:
             
         # Create a temporary directory
         temp_dir = tempfile.mkdtemp()
-        try:
-            # Save uploaded file to temp directory
-            temp_path = os.path.join(temp_dir, uploaded_file.name)
-            with open(temp_path, 'wb') as f:
-                f.write(uploaded_file.getbuffer())
-            
-            logger.info(f"File saved to temporary path: {temp_path}")
-            
-            # Get file extension
-            file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-            logger.info(f"File extension: {file_ext}")
-            
-            try:
-                if file_ext == '.m4a':
-                    logger.info("Processing m4a file...")
-                    # Convert m4a to wav first
-                    wav_path = convert_m4a_to_wav(temp_path)
-                    if wav_path and os.path.exists(wav_path):
-                        audio = AudioSegment.from_wav(wav_path)
-                    else:
-                        raise ValueError("Failed to convert m4a to wav")
-                        
-                elif file_ext == '.mp3':
-                    logger.info("Loading mp3 file...")
-                    audio = AudioSegment.from_mp3(temp_path)
-                elif file_ext == '.wav':
-                    logger.info("Loading wav file...")
-                    audio = AudioSegment.from_wav(temp_path)
-                else:
-                    raise ValueError(f"Unsupported file format: {file_ext}")
-                
-                # Verify audio was loaded
-                if audio is None:
-                    raise ValueError("Audio failed to load")
-                
-                # Save processed audio
-                output_path = save_audio_segment(audio, temp_dir)
-                if output_path is None:
-                    raise ValueError("Failed to save processed audio")
-                
-                duration = len(audio) / 1000.0  # Convert to seconds
-                logger.info(f"Audio file processed successfully: {duration:.2f} seconds")
-                
-                return output_path, duration
-                
-            except Exception as audio_error:
-                logger.error(f"Error loading audio: {str(audio_error)}")
-                raise
-            
-        finally:
-            # Cleanup will be handled by the caller
-            pass
+        
+        # Save uploaded file to temp directory
+        temp_path = os.path.join(temp_dir, uploaded_file.name)
+        with open(temp_path, 'wb') as f:
+            f.write(uploaded_file.getbuffer())
+        
+        logger.info(f"File saved to temporary path: {temp_path}")
+        
+        # Get file extension
+        file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+        logger.info(f"File extension: {file_ext}")
+        
+        # Process audio file
+        audio = process_audio_file(temp_path, file_ext)
+        
+        if audio is None:
+            raise ValueError("Audio failed to load")
+        
+        # Save processed audio
+        output_path = save_audio_segment(audio, temp_dir)
+        if output_path is None:
+            raise ValueError("Failed to save processed audio")
+        
+        duration = len(audio) / 1000.0  # Convert to seconds
+        logger.info(f"Audio file processed successfully: {duration:.2f} seconds")
+        
+        return output_path, duration
             
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}", exc_info=True)
         st.error(f"Error processing file: {str(e)}")
-        if 'temp_dir' in locals():
-            shutil.rmtree(temp_dir, ignore_errors=True)
         return None
+    finally:
+        # Cleanup if error occurred
+        if temp_dir and 'output_path' not in locals():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 def export_audio(audio: AudioSegment) -> bytes:
     """Export audio to bytes in WAV format"""
