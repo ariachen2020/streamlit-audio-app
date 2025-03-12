@@ -4,6 +4,8 @@ import os
 from openai import OpenAI
 from docx import Document
 from datetime import datetime
+from pydub import AudioSegment
+import math
 
 # 添加頁面配置
 st.set_page_config(page_title="音頻轉錄工具", layout="wide")
@@ -19,6 +21,8 @@ def get_openai_client():
 
 def format_time(seconds):
     """將秒數轉換為 HH:MM:SS 格式"""
+    if isinstance(seconds, str):
+        seconds = float(seconds)
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
@@ -40,11 +44,9 @@ def transcribe_audio(file_path):
             # 返回帶有時間戳記的段落
             segments = []
             for segment in response.segments:
-                start_time = format_time(segment.start)
-                end_time = format_time(segment.end)
                 segments.append({
-                    'start': start_time,
-                    'end': end_time,
+                    'start': str(segment.start),  # 轉換為字符串
+                    'end': str(segment.end),      # 轉換為字符串
                     'text': segment.text
                 })
             return segments
@@ -71,24 +73,117 @@ def save_transcript(segments, output_path, format='txt'):
         print(f"保存文件失敗: {str(e)}")
         return False
 
+def split_audio(file_path, chunk_size_mb=20):
+    """將音頻文件分割成小於25MB的片段"""
+    try:
+        # 載入音頻文件
+        audio = AudioSegment.from_file(file_path)
+        
+        # 計算每個片段的持續時間（毫秒）
+        duration_ms = len(audio)
+        chunk_duration_ms = 5 * 60 * 1000  # 5分鐘為一個片段
+        
+        chunks = []
+        total_chunks = math.ceil(duration_ms / chunk_duration_ms)
+        
+        for i in range(0, total_chunks):
+            start_time = i * chunk_duration_ms
+            end_time = min((i + 1) * chunk_duration_ms, duration_ms)
+            
+            chunk = audio[start_time:end_time]
+            chunk_path = f"temp_chunk_{i}.mp3"
+            
+            # 使用較低的比特率來減小文件大小
+            chunk.export(chunk_path, format="mp3", parameters=["-q:a", "9"])
+            
+            # 檢查導出的文件大小
+            if os.path.getsize(chunk_path) > 25 * 1024 * 1024:
+                # 如果還是太大，使用更低的比特率重新導出
+                chunk.export(chunk_path, format="mp3", parameters=["-q:a", "10"])
+            
+            chunks.append(chunk_path)
+            
+        return chunks
+    except Exception as e:
+        raise Exception(f"音頻分割失敗: {str(e)}")
+
+def merge_transcripts(segments_list):
+    """合併多個轉錄結果，並調整時間戳記"""
+    merged_segments = []
+    current_offset = 0.0
+    
+    for segments in segments_list:
+        for segment in segments:
+            # 確保時間值是浮點數
+            start_time = float(segment['start']) + current_offset
+            end_time = float(segment['end']) + current_offset
+            
+            merged_segments.append({
+                'start': format_time(start_time),
+                'end': format_time(end_time),
+                'text': segment['text']
+            })
+        
+        # 更新時間偏移
+        if segments:
+            current_offset += float(segments[-1]['end'])
+    
+    return merged_segments
+
 def process_audio(file_path, output_format='txt'):
     """處理音頻文件並保存為指定格式"""
     try:
-        # 獲取轉錄結果
-        segments = transcribe_audio(file_path)
+        file_size = os.path.getsize(file_path) / (1024 * 1024)  # 轉換為 MB
+        chunks = []
         
-        if segments:
-            # 生成輸出文件名
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            output_path = f"{base_name}_{timestamp}.{output_format}"
+        try:
+            if file_size > 20:  # 如果文件大於 20MB
+                # 分割音頻
+                st.info(f"文件大小為 {file_size:.1f}MB，正在分割處理...")
+                chunks = split_audio(file_path)
+                
+                # 處理每個分割
+                all_segments = []
+                progress_bar = st.progress(0)
+                
+                for i, chunk_path in enumerate(chunks):
+                    chunk_size = os.path.getsize(chunk_path) / (1024 * 1024)
+                    st.info(f"正在處理第 {i+1}/{len(chunks)} 部分 (大小: {chunk_size:.1f}MB)...")
+                    
+                    if chunk_size > 25:
+                        raise Exception(f"分割後的文件仍然過大: {chunk_size:.1f}MB")
+                    
+                    segments = transcribe_audio(chunk_path)
+                    all_segments.append(segments)
+                    progress_bar.progress((i + 1) / len(chunks))
+                
+                # 合併所有轉錄結果
+                merged_segments = merge_transcripts(all_segments)
+            else:
+                # 直接處理小文件
+                merged_segments = transcribe_audio(file_path)
             
-            # 保存文件
-            if save_transcript(segments, output_path, output_format):
-                return output_path
-        
-        return None
-        
+            if merged_segments:
+                # 生成輸出文件名
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                base_name = os.path.splitext(os.path.basename(file_path))[0]
+                output_path = f"{base_name}_{timestamp}.{output_format}"
+                
+                # 保存文件
+                if save_transcript(merged_segments, output_path, output_format):
+                    return output_path
+            
+            return None
+            
+        finally:
+            # 清理所有臨時分割文件
+            for chunk_path in chunks:
+                if os.path.exists(chunk_path):
+                    try:
+                        os.remove(chunk_path)
+                    except Exception:
+                        pass
+                        
     except Exception as e:
         st.error(f"處理失敗: {str(e)}")
         return None

@@ -15,3 +15,7 @@ python-dateutil==2.8.2
 # Optional but Recommended for Development
 black==23.11.0
 pylint==3.0.2
+
+# 新增音頻處理依賴
+pydub>=0.25.1
+ffmpeg-python>=0.2.0
