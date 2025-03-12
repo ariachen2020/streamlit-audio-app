@@ -256,7 +256,17 @@ def check_ffmpeg():
         logger.error(f"FFmpeg check failed: {str(e)}")
         return False
 
-def process_uploaded_file(uploaded_file) -> Optional[tuple[AudioSegment, str]]:
+def save_audio_segment(audio: AudioSegment, temp_dir: str) -> Optional[str]:
+    """Save AudioSegment to a temporary WAV file"""
+    try:
+        temp_path = os.path.join(temp_dir, 'temp_output.wav')
+        audio.export(temp_path, format='wav')
+        return temp_path
+    except Exception as e:
+        logger.error(f"Error saving audio segment: {str(e)}")
+        return None
+
+def process_uploaded_file(uploaded_file) -> Optional[tuple[str, float]]:
     """Process the uploaded audio file with detailed error handling"""
     try:
         if uploaded_file is None:
@@ -268,7 +278,8 @@ def process_uploaded_file(uploaded_file) -> Optional[tuple[AudioSegment, str]]:
             return None
             
         # Create a temporary directory
-        with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir = tempfile.mkdtemp()
+        try:
             # Save uploaded file to temp directory
             temp_path = os.path.join(temp_dir, uploaded_file.name)
             with open(temp_path, 'wb') as f:
@@ -287,35 +298,45 @@ def process_uploaded_file(uploaded_file) -> Optional[tuple[AudioSegment, str]]:
                     wav_path = convert_m4a_to_wav(temp_path)
                     if wav_path and os.path.exists(wav_path):
                         audio = AudioSegment.from_wav(wav_path)
-                        final_path = wav_path
                     else:
                         raise ValueError("Failed to convert m4a to wav")
                         
                 elif file_ext == '.mp3':
                     logger.info("Loading mp3 file...")
                     audio = AudioSegment.from_mp3(temp_path)
-                    final_path = temp_path
                 elif file_ext == '.wav':
                     logger.info("Loading wav file...")
                     audio = AudioSegment.from_wav(temp_path)
-                    final_path = temp_path
                 else:
                     raise ValueError(f"Unsupported file format: {file_ext}")
                 
                 # Verify audio was loaded
                 if audio is None:
                     raise ValueError("Audio failed to load")
-                    
-                logger.info(f"Audio file loaded successfully: {len(audio)}ms duration")
-                return audio, os.path.basename(final_path)
+                
+                # Save processed audio
+                output_path = save_audio_segment(audio, temp_dir)
+                if output_path is None:
+                    raise ValueError("Failed to save processed audio")
+                
+                duration = len(audio) / 1000.0  # Convert to seconds
+                logger.info(f"Audio file processed successfully: {duration:.2f} seconds")
+                
+                return output_path, duration
                 
             except Exception as audio_error:
                 logger.error(f"Error loading audio: {str(audio_error)}")
                 raise
             
+        finally:
+            # Cleanup will be handled by the caller
+            pass
+            
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}", exc_info=True)
         st.error(f"Error processing file: {str(e)}")
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir, ignore_errors=True)
         return None
 
 def export_audio(audio: AudioSegment) -> bytes:
@@ -349,20 +370,20 @@ def main():
                 result = process_uploaded_file(uploaded_file)
                 
                 if result is not None:
-                    audio, filename = result
+                    audio_path, duration = result
                     st.success("文件處理成功！")
-                    st.info(f"音頻長度: {len(audio)/1000:.2f} 秒")
+                    st.info(f"音頻長度: {duration:.2f} 秒")
                     
                     # 顯示音頻播放器
                     try:
-                        audio_bytes = export_audio(audio)
+                        audio_bytes = export_audio(AudioSegment.from_file(audio_path))
                         st.audio(audio_bytes, format="audio/wav")
                     except Exception as e:
                         logger.error(f"Error playing audio: {str(e)}")
                         st.error("Unable to play audio file")
                     
                     # 處理音頻
-                    output_path = process_audio(audio, output_format)
+                    output_path = process_audio(audio_path, output_format)
                     
                     if output_path and os.path.exists(output_path):
                         # 讀取生成的文件以供下載
@@ -373,7 +394,7 @@ def main():
                         st.download_button(
                             label=f"下載 {output_format.upper()} 文件",
                             data=file_contents,
-                            file_name=filename,
+                            file_name=os.path.basename(audio_path),
                             mime="application/octet-stream"
                         )
                         
