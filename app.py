@@ -234,7 +234,8 @@ def check_ffmpeg():
                               capture_output=True, 
                               text=True,
                               timeout=10)
-        logger.info(f"FFmpeg version info: {result.stdout.split('\n')[0]}")
+        first_line = result.stdout.split('\n')[0]
+        logger.info(f"FFmpeg version info: {first_line}")
         return True
     except Exception as e:
         logger.error(f"FFmpeg check failed: {str(e)}")
