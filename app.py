@@ -11,6 +11,7 @@ import logging
 import sys
 from typing import Optional
 import tempfile
+import subprocess
 
 # Configure logging
 logging.basicConfig(
@@ -222,10 +223,27 @@ def process_audio(file_path, output_format='txt'):
         st.error(f"處理失敗: {str(e)}")
         return None
 
+def check_ffmpeg():
+    """Check if ffmpeg is available and log its version"""
+    try:
+        result = subprocess.run(['ffmpeg', '-version'], 
+                              capture_output=True, 
+                              text=True)
+        logger.info(f"FFmpeg version info: {result.stdout.split('\\n')[0]}")
+        return True
+    except Exception as e:
+        logger.error(f"FFmpeg check failed: {str(e)}")
+        return False
+
 def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
     """Process the uploaded audio file with detailed error handling"""
     try:
         if uploaded_file is None:
+            return None
+            
+        # Check ffmpeg availability
+        if not check_ffmpeg():
+            st.error("FFmpeg is not available. Please contact support.")
             return None
             
         # Create a temporary directory
@@ -242,10 +260,16 @@ def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
             logger.info(f"File extension: {file_ext}")
             
             try:
-                # Try to load audio file with explicit format
+                # Try to load audio file with explicit parameters
                 if file_ext == '.m4a':
                     logger.info("Attempting to load m4a file...")
-                    audio = AudioSegment.from_file(temp_path, format='m4a', codec='aac')
+                    # Try different approaches for m4a
+                    try:
+                        audio = AudioSegment.from_file(temp_path, format='m4a')
+                    except:
+                        logger.info("First attempt failed, trying with different parameters...")
+                        audio = AudioSegment.from_file(temp_path, format='m4a', codec='aac')
+                        
                 elif file_ext == '.mp3':
                     logger.info("Loading mp3 file...")
                     audio = AudioSegment.from_mp3(temp_path)
@@ -255,6 +279,10 @@ def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
                 else:
                     raise ValueError(f"Unsupported file format: {file_ext}")
                 
+                # Verify audio was loaded
+                if audio is None:
+                    raise ValueError("Audio failed to load")
+                    
                 logger.info(f"Audio file loaded successfully: {len(audio)}ms duration")
                 return audio
                 
@@ -263,6 +291,7 @@ def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
                 # Try alternative loading method
                 try:
                     logger.info("Attempting alternative loading method...")
+                    # Try to load file without specifying format
                     audio = AudioSegment.from_file(temp_path)
                     logger.info("Alternative loading successful")
                     return audio
