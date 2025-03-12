@@ -233,7 +233,7 @@ def convert_m4a_to_wav(input_path: str) -> Optional[str]:
         logger.info(f"Running FFmpeg command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         
-        if result.returncode == 0:
+        if result.returncode == 0 and os.path.exists(output_path):
             logger.info("Conversion successful")
             return output_path
         else:
@@ -255,7 +255,7 @@ def check_ffmpeg():
         logger.error(f"FFmpeg check failed: {str(e)}")
         return False
 
-def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
+def process_uploaded_file(uploaded_file) -> Optional[tuple[AudioSegment, str]]:
     """Process the uploaded audio file with detailed error handling"""
     try:
         if uploaded_file is None:
@@ -284,17 +284,20 @@ def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
                     logger.info("Processing m4a file...")
                     # Convert m4a to wav first
                     wav_path = convert_m4a_to_wav(temp_path)
-                    if wav_path:
+                    if wav_path and os.path.exists(wav_path):
                         audio = AudioSegment.from_wav(wav_path)
+                        final_path = wav_path
                     else:
                         raise ValueError("Failed to convert m4a to wav")
                         
                 elif file_ext == '.mp3':
                     logger.info("Loading mp3 file...")
                     audio = AudioSegment.from_mp3(temp_path)
+                    final_path = temp_path
                 elif file_ext == '.wav':
                     logger.info("Loading wav file...")
                     audio = AudioSegment.from_wav(temp_path)
+                    final_path = temp_path
                 else:
                     raise ValueError(f"Unsupported file format: {file_ext}")
                 
@@ -303,7 +306,7 @@ def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
                     raise ValueError("Audio failed to load")
                     
                 logger.info(f"Audio file loaded successfully: {len(audio)}ms duration")
-                return audio
+                return audio, os.path.basename(final_path)
                 
             except Exception as audio_error:
                 logger.error(f"Error loading audio: {str(audio_error)}")
@@ -332,9 +335,16 @@ def main():
         if uploaded_file and st.button("開始轉錄"):
             with st.spinner("正在處理音頻文件..."):
                 # 處理上傳的文件
-                audio = process_uploaded_file(uploaded_file)
+                result = process_uploaded_file(uploaded_file)
                 
-                if audio is not None:
+                if result is not None:
+                    audio, filename = result
+                    st.success("文件處理成功！")
+                    st.info(f"音頻長度: {len(audio)/1000:.2f} 秒")
+                    
+                    # 顯示音頻播放器
+                    st.audio(audio.export(), format="audio/wav")
+                    
                     # 處理音頻
                     output_path = process_audio(audio, output_format)
                     
@@ -347,7 +357,7 @@ def main():
                         st.download_button(
                             label=f"下載 {output_format.upper()} 文件",
                             data=file_contents,
-                            file_name=os.path.basename(output_path),
+                            file_name=filename,
                             mime="application/octet-stream"
                         )
                         
