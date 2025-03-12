@@ -13,6 +13,7 @@ from typing import Optional
 import tempfile
 import subprocess
 import shutil
+import io
 
 # Configure logging
 logging.basicConfig(
@@ -317,6 +318,16 @@ def process_uploaded_file(uploaded_file) -> Optional[tuple[AudioSegment, str]]:
         st.error(f"Error processing file: {str(e)}")
         return None
 
+def export_audio(audio: AudioSegment) -> bytes:
+    """Export audio to bytes in WAV format"""
+    try:
+        buffer = io.BytesIO()
+        audio.export(buffer, format="wav")
+        return buffer.getvalue()
+    except Exception as e:
+        logger.error(f"Error exporting audio: {str(e)}")
+        raise
+
 def main():
     try:
         st.title("音頻轉錄工具")
@@ -343,7 +354,12 @@ def main():
                     st.info(f"音頻長度: {len(audio)/1000:.2f} 秒")
                     
                     # 顯示音頻播放器
-                    st.audio(audio.export(), format="audio/wav")
+                    try:
+                        audio_bytes = export_audio(audio)
+                        st.audio(audio_bytes, format="audio/wav")
+                    except Exception as e:
+                        logger.error(f"Error playing audio: {str(e)}")
+                        st.error("Unable to play audio file")
                     
                     # 處理音頻
                     output_path = process_audio(audio, output_format)
