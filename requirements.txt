@@ -4,8 +4,6 @@ streamlit>=1.30.0
 
 # 文件處理
 python-docx>=0.8.11
-
-# 基礎依賴
 requests>=2.31.0
 python-dotenv>=1.0.0
 
@@ -19,3 +17,6 @@ pylint==3.0.2
 # 新增音頻處理依賴
 pydub>=0.25.1
 ffmpeg-python>=0.2.0
+
+# 系統依賴
+python-multipart>=0.0.6
