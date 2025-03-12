@@ -233,8 +233,8 @@ def check_ffmpeg():
         result = subprocess.run(['ffmpeg', '-version'], 
                               capture_output=True, 
                               text=True,
-                              timeout=10)  # Add timeout
-        logger.info(f"FFmpeg version info: {result.stdout.split('\\n')[0]}")
+                              timeout=10)
+        logger.info(f"FFmpeg version info: {result.stdout.split('\n')[0]}")
         return True
     except Exception as e:
         logger.error(f"FFmpeg check failed: {str(e)}")
