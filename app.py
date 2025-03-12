@@ -7,9 +7,23 @@ from datetime import datetime
 from pydub import AudioSegment
 import math
 import warnings
+import logging
+import sys
+from typing import Optional
+import tempfile
 
-# 忽略 pydub 的警告
-warnings.filterwarnings("ignore", category=SyntaxWarning)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Suppress pydub warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # 設置 AudioSegment 的臨時目錄
 if not os.path.exists('temp'):
@@ -205,60 +219,93 @@ def process_audio(file_path, output_format='txt'):
         st.error(f"處理失敗: {str(e)}")
         return None
 
-def main():
-    st.title("音頻轉錄工具")
-    
-    # 檢查是否設置了 API Key
-    if not api_key:
-        st.warning("請在側邊欄輸入 OpenAI API Key")
-        return
-    
-    # 文件上傳
-    uploaded_file = st.file_uploader("上傳音頻文件", type=['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm'])
-    
-    # 選擇輸出格式
-    output_format = st.radio("選擇輸出格式", ["txt", "docx"])
-    
-    if uploaded_file and st.button("開始轉錄"):
-        with st.spinner("正在處理音頻文件..."):
-            # 保存上傳的文件
-            temp_path = f"temp_{uploaded_file.name}"
-            with open(temp_path, "wb") as f:
+def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
+    """Process the uploaded audio file with detailed error handling"""
+    try:
+        if uploaded_file is None:
+            return None
+            
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Save uploaded file to temp directory
+            temp_path = os.path.join(temp_dir, uploaded_file.name)
+            with open(temp_path, 'wb') as f:
                 f.write(uploaded_file.getbuffer())
             
-            try:
-                # 處理音頻
-                output_path = process_audio(temp_path, output_format)
-                
-                if output_path and os.path.exists(output_path):
-                    # 讀取生成的文件以供下載
-                    with open(output_path, "rb") as f:
-                        file_contents = f.read()
-                    
-                    # 添加下載按鈕
-                    st.download_button(
-                        label=f"下載 {output_format.upper()} 文件",
-                        data=file_contents,
-                        file_name=os.path.basename(output_path),
-                        mime="application/octet-stream"
-                    )
-                    
-                    # 如果是 txt 格式，直接顯示內容
-                    if output_format == "txt":
-                        with open(output_path, "r", encoding="utf-8") as f:
-                            st.text_area("轉錄結果", f.read(), height=300)
-                else:
-                    st.error("轉錄失敗，請重試")
-                
-            except Exception as e:
-                st.error(f"處理失敗: {str(e)}")
+            logger.info(f"File saved to temporary path: {temp_path}")
             
-            finally:
-                # 清理臨時文件
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                if 'output_path' in locals() and output_path and os.path.exists(output_path):
-                    os.remove(output_path)
+            # Get file extension
+            file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+            logger.info(f"File extension: {file_ext}")
+            
+            # Load audio file based on format
+            if file_ext == '.mp3':
+                audio = AudioSegment.from_mp3(temp_path)
+            elif file_ext == '.wav':
+                audio = AudioSegment.from_wav(temp_path)
+            elif file_ext == '.m4a':
+                audio = AudioSegment.from_file(temp_path, format='m4a')
+            else:
+                raise ValueError(f"Unsupported file format: {file_ext}")
+                
+            logger.info("Audio file loaded successfully")
+            return audio
+            
+    except Exception as e:
+        logger.error(f"Error processing file: {str(e)}", exc_info=True)
+        st.error(f"Error processing file: {str(e)}")
+        return None
+
+def main():
+    try:
+        st.title("音頻轉錄工具")
+        
+        # 檢查是否設置了 API Key
+        if not api_key:
+            st.warning("請在側邊欄輸入 OpenAI API Key")
+            return
+        
+        # 文件上傳
+        uploaded_file = st.file_uploader("上傳音頻文件", type=['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm'])
+        
+        # 選擇輸出格式
+        output_format = st.radio("選擇輸出格式", ["txt", "docx"])
+        
+        if uploaded_file and st.button("開始轉錄"):
+            with st.spinner("正在處理音頻文件..."):
+                # 處理上傳的文件
+                audio = process_uploaded_file(uploaded_file)
+                
+                if audio is not None:
+                    # 處理音頻
+                    output_path = process_audio(audio, output_format)
+                    
+                    if output_path and os.path.exists(output_path):
+                        # 讀取生成的文件以供下載
+                        with open(output_path, "rb") as f:
+                            file_contents = f.read()
+                        
+                        # 添加下載按鈕
+                        st.download_button(
+                            label=f"下載 {output_format.upper()} 文件",
+                            data=file_contents,
+                            file_name=os.path.basename(output_path),
+                            mime="application/octet-stream"
+                        )
+                        
+                        # 如果是 txt 格式，直接顯示內容
+                        if output_format == "txt":
+                            with open(output_path, "r", encoding="utf-8") as f:
+                                st.text_area("轉錄結果", f.read(), height=300)
+                    else:
+                        st.error("轉錄失敗，請重試")
+                    
+                else:
+                    st.error("文件處理失敗，請重試")
+
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}", exc_info=True)
+        st.error(f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
     main()
