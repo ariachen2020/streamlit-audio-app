@@ -18,7 +18,7 @@ import time
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout)
@@ -358,7 +358,13 @@ def export_audio(audio: AudioSegment) -> bytes:
 
 def main():
     try:
-        st.title("音頻轉錄工具")
+        st.title("Audio Processing App")
+        logger.info("App started successfully")
+        
+        # 檢查環境
+        logger.info(f"Python version: {sys.version}")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Directory contents: {os.listdir('.')}")
         
         # 檢查是否設置了 API Key
         if not api_key:
@@ -416,8 +422,12 @@ def main():
                     st.error("文件處理失敗，請重試")
 
     except Exception as e:
-        logger.error(f"An error occurred: {str(e)}", exc_info=True)
+        logger.error(f"Error in main app: {str(e)}", exc_info=True)
         st.error(f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"Critical error: {str(e)}", exc_info=True)
+        st.error("A critical error occurred. Please check the logs.")
