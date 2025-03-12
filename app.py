@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 # Suppress pydub warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+# Configure ffmpeg path if needed
+# AudioSegment.converter = "/usr/bin/ffmpeg"  # Uncomment if ffmpeg path is different
+
 # 設置 AudioSegment 的臨時目錄
 if not os.path.exists('temp'):
     os.makedirs('temp')
@@ -238,18 +241,34 @@ def process_uploaded_file(uploaded_file) -> Optional[AudioSegment]:
             file_ext = os.path.splitext(uploaded_file.name)[1].lower()
             logger.info(f"File extension: {file_ext}")
             
-            # Load audio file based on format
-            if file_ext == '.mp3':
-                audio = AudioSegment.from_mp3(temp_path)
-            elif file_ext == '.wav':
-                audio = AudioSegment.from_wav(temp_path)
-            elif file_ext == '.m4a':
-                audio = AudioSegment.from_file(temp_path, format='m4a')
-            else:
-                raise ValueError(f"Unsupported file format: {file_ext}")
+            try:
+                # Try to load audio file with explicit format
+                if file_ext == '.m4a':
+                    logger.info("Attempting to load m4a file...")
+                    audio = AudioSegment.from_file(temp_path, format='m4a', codec='aac')
+                elif file_ext == '.mp3':
+                    logger.info("Loading mp3 file...")
+                    audio = AudioSegment.from_mp3(temp_path)
+                elif file_ext == '.wav':
+                    logger.info("Loading wav file...")
+                    audio = AudioSegment.from_wav(temp_path)
+                else:
+                    raise ValueError(f"Unsupported file format: {file_ext}")
                 
-            logger.info("Audio file loaded successfully")
-            return audio
+                logger.info(f"Audio file loaded successfully: {len(audio)}ms duration")
+                return audio
+                
+            except Exception as audio_error:
+                logger.error(f"Error loading audio: {str(audio_error)}")
+                # Try alternative loading method
+                try:
+                    logger.info("Attempting alternative loading method...")
+                    audio = AudioSegment.from_file(temp_path)
+                    logger.info("Alternative loading successful")
+                    return audio
+                except Exception as alt_error:
+                    logger.error(f"Alternative loading failed: {str(alt_error)}")
+                    raise
             
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}", exc_info=True)
