@@ -6,6 +6,15 @@ from docx import Document
 from datetime import datetime
 from pydub import AudioSegment
 import math
+import warnings
+
+# 忽略 pydub 的警告
+warnings.filterwarnings("ignore", category=SyntaxWarning)
+
+# 設置 AudioSegment 的臨時目錄
+if not os.path.exists('temp'):
+    os.makedirs('temp')
+AudioSegment.converter = 'ffmpeg'
 
 # 添加頁面配置
 st.set_page_config(page_title="音頻轉錄工具", layout="wide")
@@ -76,6 +85,11 @@ def save_transcript(segments, output_path, format='txt'):
 def split_audio(file_path, chunk_size_mb=20):
     """將音頻文件分割成小於25MB的片段"""
     try:
+        # 確保臨時目錄存在
+        temp_dir = "temp"
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+        
         # 載入音頻文件
         audio = AudioSegment.from_file(file_path)
         
@@ -91,7 +105,7 @@ def split_audio(file_path, chunk_size_mb=20):
             end_time = min((i + 1) * chunk_duration_ms, duration_ms)
             
             chunk = audio[start_time:end_time]
-            chunk_path = f"temp_chunk_{i}.mp3"
+            chunk_path = os.path.join(temp_dir, f"temp_chunk_{i}.mp3")
             
             # 使用較低的比特率來減小文件大小
             chunk.export(chunk_path, format="mp3", parameters=["-q:a", "9"])
@@ -105,6 +119,8 @@ def split_audio(file_path, chunk_size_mb=20):
             
         return chunks
     except Exception as e:
+        st.error(f"音頻分割失敗: {str(e)}")
+        st.error("請確保已安裝 ffmpeg")
         raise Exception(f"音頻分割失敗: {str(e)}")
 
 def merge_transcripts(segments_list):
@@ -133,6 +149,10 @@ def merge_transcripts(segments_list):
 def process_audio(file_path, output_format='txt'):
     """處理音頻文件並保存為指定格式"""
     try:
+        # 確保臨時目錄存在
+        if not os.path.exists('temp'):
+            os.makedirs('temp')
+        
         file_size = os.path.getsize(file_path) / (1024 * 1024)  # 轉換為 MB
         chunks = []
         
@@ -150,9 +170,6 @@ def process_audio(file_path, output_format='txt'):
                     chunk_size = os.path.getsize(chunk_path) / (1024 * 1024)
                     st.info(f"正在處理第 {i+1}/{len(chunks)} 部分 (大小: {chunk_size:.1f}MB)...")
                     
-                    if chunk_size > 25:
-                        raise Exception(f"分割後的文件仍然過大: {chunk_size:.1f}MB")
-                    
                     segments = transcribe_audio(chunk_path)
                     all_segments.append(segments)
                     progress_bar.progress((i + 1) / len(chunks))
@@ -167,7 +184,7 @@ def process_audio(file_path, output_format='txt'):
                 # 生成輸出文件名
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 base_name = os.path.splitext(os.path.basename(file_path))[0]
-                output_path = f"{base_name}_{timestamp}.{output_format}"
+                output_path = os.path.join('temp', f"{base_name}_{timestamp}.{output_format}")
                 
                 # 保存文件
                 if save_transcript(merged_segments, output_path, output_format):
