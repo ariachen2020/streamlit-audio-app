@@ -58,6 +58,16 @@ def format_time(seconds):
     secs = int(seconds % 60)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
+def format_time_srt(seconds):
+    """將秒數轉換為 SRT 格式時間戳 (HH:MM:SS,mmm)"""
+    if isinstance(seconds, str):
+        seconds = float(seconds)
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    milliseconds = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
 def transcribe_audio(file_path):
     """音頻轉錄：將音頻轉換為文字，包含時間戳記"""
     try:
@@ -97,6 +107,18 @@ def save_transcript(segments, output_path, format='txt'):
             for segment in segments:
                 doc.add_paragraph(f"[{segment['start']} - {segment['end']}] {segment['text']}")
             doc.save(output_path)
+            
+        elif format == 'srt':
+            with open(output_path, 'w', encoding='utf-8') as f:
+                for i, segment in enumerate(segments, 1):
+                    # 轉換時間格式為 SRT 格式
+                    start_time = format_time_srt(float(segment['start']) if isinstance(segment['start'], str) else segment['start'])
+                    end_time = format_time_srt(float(segment['end']) if isinstance(segment['end'], str) else segment['end'])
+                    
+                    # SRT 格式：序號、時間軸、文字、空行
+                    f.write(f"{i}\n")
+                    f.write(f"{start_time} --> {end_time}\n")
+                    f.write(f"{segment['text'].strip()}\n\n")
         
         return True
     except Exception as e:
@@ -375,7 +397,7 @@ def main():
         uploaded_file = st.file_uploader("上傳音頻文件", type=['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm'])
         
         # 選擇輸出格式
-        output_format = st.radio("選擇輸出格式", ["txt", "docx"])
+        output_format = st.radio("選擇輸出格式", ["txt", "docx", "srt"])
         
         if uploaded_file and st.button("開始轉錄"):
             with st.spinner("正在處理音頻文件..."):
@@ -403,18 +425,65 @@ def main():
                         with open(output_path, "rb") as f:
                             file_contents = f.read()
                         
+                        # 設置正確的 MIME 類型和文件名
+                        if output_format == "srt":
+                            mime_type = "text/plain"
+                            download_filename = os.path.splitext(os.path.basename(output_path))[0] + ".srt"
+                        elif output_format == "docx":
+                            mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            download_filename = os.path.splitext(os.path.basename(output_path))[0] + ".docx"
+                        else:  # txt
+                            mime_type = "text/plain"
+                            download_filename = os.path.splitext(os.path.basename(output_path))[0] + ".txt"
+                        
                         # 添加下載按鈕
                         st.download_button(
                             label=f"下載 {output_format.upper()} 文件",
                             data=file_contents,
-                            file_name=os.path.basename(audio_path),
-                            mime="application/octet-stream"
+                            file_name=download_filename,
+                            mime=mime_type
                         )
                         
-                        # 如果是 txt 格式，直接顯示內容
-                        if output_format == "txt":
+                        # 如果是 txt 或 srt 格式，直接顯示內容和複製功能
+                        if output_format in ["txt", "srt"]:
                             with open(output_path, "r", encoding="utf-8") as f:
-                                st.text_area("轉錄結果", f.read(), height=300)
+                                content = f.read()
+                                label = "轉錄結果" if output_format == "txt" else "SRT 字幕內容"
+                                
+                                # 顯示主要內容
+                                st.text_area(label, content, height=300)
+                                
+                                # 添加複製功能區域
+                                st.markdown("---")
+                                st.markdown("### 📋 複製文字內容")
+                                
+                                # 創建按鈕布局
+                                col1, col2, col3 = st.columns([2, 1, 1])
+                                
+                                with col2:
+                                    if st.button("📋 顯示可選文字", key=f"show_copy_{output_format}"):
+                                        st.session_state[f'copy_visible_{output_format}'] = True
+                                
+                                with col3:
+                                    if st.button("❌ 隱藏", key=f"hide_copy_{output_format}"):
+                                        st.session_state[f'copy_visible_{output_format}'] = False
+                                
+                                # 顯示可複製區域
+                                if st.session_state.get(f'copy_visible_{output_format}', False):
+                                    st.info("💡 提示: 點擊文字框，全選 (Ctrl+A/Cmd+A) 然後複製 (Ctrl+C/Cmd+C)")
+                                    
+                                    # 使用 code 組件讓文字更容易選擇
+                                    with st.expander("點擊展開文字內容", expanded=True):
+                                        st.code(content, language="text")
+                                    
+                                    # 也提供一個文字框版本
+                                    st.text_area(
+                                        "或者使用此文字框複製",
+                                        content,
+                                        height=150,
+                                        key=f"copyable_text_{output_format}",
+                                        help="點擊文字框，全選後複製"
+                                    )
                     else:
                         st.error("轉錄失敗，請重試")
                     
