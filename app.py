@@ -15,6 +15,8 @@ import subprocess
 import shutil
 import io
 import time
+from streamlit_extras.add_vertical_space import add_vertical_space
+from streamlit_extras.st_copy_to_clipboard import st_copy_to_clipboard
 
 # Configure logging
 logging.basicConfig(
@@ -469,41 +471,9 @@ def main():
                 if fmt in ["txt", "srt"]:
                     st.markdown("---")
                     
-                    # 創建標題和複製按鈕的並排布局
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.markdown(f"**{label}**")
-                    with col2:
-                        # 簡單的複製按鈕，顯示複製框
-                        copy_clicked = st.button("📋 複製", key=f"copy_btn_{fmt}")
-                    
-                    # 顯示主要內容
+                    st.markdown(f"**{label}**")
                     st.text_area("", content, height=300, key=f"main_text_{fmt}")
-                    
-                    # 如果點擊複製按鈕，立即顯示複製框
-                    if copy_clicked:
-                        st.session_state[f'show_copy_{fmt}'] = True
-                    
-                    # 顯示複製區域
-                    if st.session_state.get(f'show_copy_{fmt}', False):
-                        st.markdown("---")
-                        col_info, col_close = st.columns([4, 1])
-                        with col_info:
-                            st.markdown("### 📋 複製文字")
-                            st.info("💡 在下方文字框中點擊，然後 Ctrl+A 全選，Ctrl+C 複製")
-                        with col_close:
-                            if st.button("✖️", key=f"close_{fmt}", help="關閉複製區域"):
-                                st.session_state[f'show_copy_{fmt}'] = False
-                                st.rerun()
-                        
-                        # 純文字內容，方便複製
-                        st.text_area(
-                            "點擊此框，全選並複製",
-                            content,
-                            height=200,
-                            key=f"copy_area_{fmt}",
-                            help="點擊文字框 → Ctrl+A 全選 → Ctrl+C 複製"
-                        )
+                    st_copy_to_clipboard(content, "📋 複製", f"copy_btn_{fmt}")
                     
                     # 添加清除按鈕
                     if st.button(f"🗑️ 清除 {fmt.upper()} 結果", key=f"clear_{fmt}"):
