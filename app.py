@@ -457,32 +457,19 @@ def main():
                                 st.markdown("---")
                                 st.markdown("### 📋 複製文字內容")
                                 
-                                # 創建按鈕布局
-                                col1, col2, col3 = st.columns([2, 1, 1])
+                                # 簡化的複製功能
+                                show_copy = st.checkbox("顯示可複製文字", key=f"show_copy_{output_format}")
                                 
-                                with col2:
-                                    if st.button("📋 顯示可選文字", key=f"show_copy_{output_format}"):
-                                        st.session_state[f'copy_visible_{output_format}'] = True
-                                
-                                with col3:
-                                    if st.button("❌ 隱藏", key=f"hide_copy_{output_format}"):
-                                        st.session_state[f'copy_visible_{output_format}'] = False
-                                
-                                # 顯示可複製區域
-                                if st.session_state.get(f'copy_visible_{output_format}', False):
-                                    st.info("💡 提示: 點擊文字框，全選 (Ctrl+A/Cmd+A) 然後複製 (Ctrl+C/Cmd+C)")
+                                if show_copy:
+                                    st.info("💡 提示: 在下方文字框中全選 (Ctrl+A/Cmd+A) 然後複製 (Ctrl+C/Cmd+C)")
                                     
-                                    # 使用 code 組件讓文字更容易選擇
-                                    with st.expander("點擊展開文字內容", expanded=True):
-                                        st.code(content, language="text")
-                                    
-                                    # 也提供一個文字框版本
+                                    # 提供純文字複製框
                                     st.text_area(
-                                        "或者使用此文字框複製",
+                                        "選取並複製此內容",
                                         content,
-                                        height=150,
-                                        key=f"copyable_text_{output_format}",
-                                        help="點擊文字框，全選後複製"
+                                        height=200,
+                                        key=f"copyable_{output_format}",
+                                        help="全選此文字框內容然後複製"
                                     )
                     else:
                         st.error("轉錄失敗，請重試")
