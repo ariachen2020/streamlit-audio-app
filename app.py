@@ -451,37 +451,39 @@ def main():
                                 label = "轉錄結果" if output_format == "txt" else "SRT 字幕內容"
                                 
                                 # 創建標題和複製按鈕的並排布局
-                                col1, col2 = st.columns([4, 1])
+                                col1, col2 = st.columns([3, 1])
                                 with col1:
                                     st.markdown(f"**{label}**")
                                 with col2:
-                                    # 使用 JavaScript 實現真正的複製到剪貼板功能
-                                    if st.button("📋 複製文字", key=f"copy_btn_{output_format}"):
-                                        # 將內容存儲到 session state 以便 JavaScript 訪問
-                                        st.session_state[f'copy_content_{output_format}'] = content
-                                        st.success("已準備複製！請點擊下方的複製按鈕")
+                                    # 簡單的複製按鈕，顯示複製框
+                                    copy_clicked = st.button("📋 複製", key=f"copy_btn_{output_format}")
                                 
                                 # 顯示主要內容
                                 st.text_area("", content, height=300, key=f"main_text_{output_format}")
                                 
-                                # 如果用戶點擊了複製按鈕，顯示可複製的內容
-                                if st.session_state.get(f'copy_content_{output_format}'):
+                                # 如果點擊複製按鈕，立即顯示複製框
+                                if copy_clicked:
+                                    st.session_state[f'show_copy_{output_format}'] = True
+                                
+                                # 顯示複製區域
+                                if st.session_state.get(f'show_copy_{output_format}', False):
                                     st.markdown("---")
-                                    st.markdown("### 📋 複製內容")
-                                    st.info("💡 點擊下方文字框，全選 (Ctrl+A/Cmd+A) 然後複製 (Ctrl+C/Cmd+C)")
+                                    col_info, col_close = st.columns([4, 1])
+                                    with col_info:
+                                        st.markdown("### 📋 複製文字")
+                                        st.info("💡 在下方文字框中點擊，然後 Ctrl+A 全選，Ctrl+C 複製")
+                                    with col_close:
+                                        if st.button("✖️", key=f"close_{output_format}", help="關閉複製區域"):
+                                            st.session_state[f'show_copy_{output_format}'] = False
+                                            st.rerun()
                                     
-                                    # 清除複製狀態的按鈕
-                                    if st.button("❌ 關閉複製區域", key=f"close_copy_{output_format}"):
-                                        del st.session_state[f'copy_content_{output_format}']
-                                        st.rerun()
-                                    
-                                    # 可複製的文字框
+                                    # 純文字內容，方便複製
                                     st.text_area(
-                                        "選取並複製此內容",
+                                        "點擊此框，全選並複製",
                                         content,
                                         height=200,
-                                        key=f"copyable_{output_format}",
-                                        help="全選此文字框內容然後複製"
+                                        key=f"copy_area_{output_format}",
+                                        help="點擊文字框 → Ctrl+A 全選 → Ctrl+C 複製"
                                     )
                     else:
                         st.error("轉錄失敗，請重試")
