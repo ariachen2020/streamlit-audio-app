@@ -450,46 +450,69 @@ def main():
                                 content = f.read()
                                 label = "轉錄結果" if output_format == "txt" else "SRT 字幕內容"
                                 
-                                # 創建標題和複製按鈕的並排布局
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.markdown(f"**{label}**")
-                                with col2:
-                                    # 簡單的複製按鈕，顯示複製框
-                                    copy_clicked = st.button("📋 複製", key=f"copy_btn_{output_format}")
-                                
-                                # 顯示主要內容
-                                st.text_area("", content, height=300, key=f"main_text_{output_format}")
-                                
-                                # 如果點擊複製按鈕，立即顯示複製框
-                                if copy_clicked:
-                                    st.session_state[f'show_copy_{output_format}'] = True
-                                
-                                # 顯示複製區域
-                                if st.session_state.get(f'show_copy_{output_format}', False):
-                                    st.markdown("---")
-                                    col_info, col_close = st.columns([4, 1])
-                                    with col_info:
-                                        st.markdown("### 📋 複製文字")
-                                        st.info("💡 在下方文字框中點擊，然後 Ctrl+A 全選，Ctrl+C 複製")
-                                    with col_close:
-                                        if st.button("✖️", key=f"close_{output_format}", help="關閉複製區域"):
-                                            st.session_state[f'show_copy_{output_format}'] = False
-                                            st.rerun()
-                                    
-                                    # 純文字內容，方便複製
-                                    st.text_area(
-                                        "點擊此框，全選並複製",
-                                        content,
-                                        height=200,
-                                        key=f"copy_area_{output_format}",
-                                        help="點擊文字框 → Ctrl+A 全選 → Ctrl+C 複製"
-                                    )
+                                # 保存內容到 session_state，避免重新運行時丟失
+                                st.session_state[f'transcription_content_{output_format}'] = content
+                                st.session_state[f'transcription_label_{output_format}'] = label
                     else:
                         st.error("轉錄失敗，請重試")
                     
                 else:
                     st.error("文件處理失敗，請重試")
+        
+        # 在任何時候都檢查是否有保存的轉錄內容要顯示
+        for fmt in ["txt", "srt", "docx"]:
+            if f'transcription_content_{fmt}' in st.session_state and f'transcription_label_{fmt}' in st.session_state:
+                content = st.session_state[f'transcription_content_{fmt}']
+                label = st.session_state[f'transcription_label_{fmt}']
+                
+                # 只顯示文字格式的內容（txt 和 srt）
+                if fmt in ["txt", "srt"]:
+                    st.markdown("---")
+                    
+                    # 創建標題和複製按鈕的並排布局
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown(f"**{label}**")
+                    with col2:
+                        # 簡單的複製按鈕，顯示複製框
+                        copy_clicked = st.button("📋 複製", key=f"copy_btn_{fmt}")
+                    
+                    # 顯示主要內容
+                    st.text_area("", content, height=300, key=f"main_text_{fmt}")
+                    
+                    # 如果點擊複製按鈕，立即顯示複製框
+                    if copy_clicked:
+                        st.session_state[f'show_copy_{fmt}'] = True
+                    
+                    # 顯示複製區域
+                    if st.session_state.get(f'show_copy_{fmt}', False):
+                        st.markdown("---")
+                        col_info, col_close = st.columns([4, 1])
+                        with col_info:
+                            st.markdown("### 📋 複製文字")
+                            st.info("💡 在下方文字框中點擊，然後 Ctrl+A 全選，Ctrl+C 複製")
+                        with col_close:
+                            if st.button("✖️", key=f"close_{fmt}", help="關閉複製區域"):
+                                st.session_state[f'show_copy_{fmt}'] = False
+                                st.rerun()
+                        
+                        # 純文字內容，方便複製
+                        st.text_area(
+                            "點擊此框，全選並複製",
+                            content,
+                            height=200,
+                            key=f"copy_area_{fmt}",
+                            help="點擊文字框 → Ctrl+A 全選 → Ctrl+C 複製"
+                        )
+                    
+                    # 添加清除按鈕
+                    if st.button(f"🗑️ 清除 {fmt.upper()} 結果", key=f"clear_{fmt}"):
+                        # 清除相關的 session state
+                        keys_to_remove = [f'transcription_content_{fmt}', f'transcription_label_{fmt}', f'show_copy_{fmt}']
+                        for key in keys_to_remove:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.rerun()
 
     except Exception as e:
         logger.error(f"Error in main app: {str(e)}", exc_info=True)
