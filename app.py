@@ -15,8 +15,7 @@ import subprocess
 import shutil
 import io
 import time
-from streamlit_extras.add_vertical_space import add_vertical_space
-from streamlit_extras.st_copy_to_clipboard import st_copy_to_clipboard
+from st_copy_to_clipboard import st_copy_to_clipboard
 
 # Configure logging
 logging.basicConfig(
